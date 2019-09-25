@@ -43,6 +43,7 @@ const deferred = {};
 const groupedPromises = {};
 
 function pendingPromise([promiseFactory, name]) {
+  // look through all remaining promises scenarios
   if (groupedPromises[name] == 1) {
     // resolve immediately
     if (deferred[name]) {
@@ -62,10 +63,9 @@ function pendingPromise([promiseFactory, name]) {
 function runPromise(scenario, index) {
   if (!scenario[index]) return;
   const [promiseFactory, name] = scenario[index];
-  // check if this promise exists in other threads
 
   pendingPromise(scenario[index])
-    .then(promiseFactory)
+    .then(promiseFactory) // this runs the actual promise
     .then(() => {
       runPromise(scenario, index + 1);
     });
@@ -73,6 +73,7 @@ function runPromise(scenario, index) {
 
 function run(scenarios) {
   // group promises with same name
+  // SEARCH HAS TO HAPPEN AT RUNTIME (is this async learning?)
   for (var i = 0; i < scenarios.length; i++) {
     const scenario = scenarios[i];
 
