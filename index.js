@@ -1,30 +1,11 @@
-function p(name, time) {
-  return [
-    () =>
-      new Promise((resolve, reject) => {
-        setTimeout(() => {
-          console.log('executed', name);
-          resolve();
-        }, time);
-      }),
-    name
-  ];
+function p(time) {
+  return () =>
+    new Promise((resolve, reject) => {
+      setTimeout(() => {
+        resolve();
+      }, time);
+    });
 }
-
-const s1 = [
-  p('TakesALongTime', 5000),
-  p('ShowAd', 1000),
-  p('Bar', 500),
-  p('Main', 100)
-];
-
-const s2 = [
-  p('SomethingFast', 500),
-  p('AnotherFast', 200),
-  p('FooFast', 100),
-  p('ShowAd', 1000),
-  p('SomethingElse', 1000)
-];
 
 // engine needs to make this a promise chain:
 // TakesALongTime
@@ -42,12 +23,15 @@ const deferred = {};
 // then it decreases them until only 1 is left
 const groupedPromises = {};
 
-function pendingPromise([promiseFactory, name]) {
+function pendingPromise([name, promiseFactory]) {
   // look through all remaining promises scenarios
   if (groupedPromises[name] == 1) {
-    // resolve immediately
+    // resolve all immediately
     if (deferred[name]) {
-      deferred[name](); // make the other resolve as well
+      // make the others resolve as well
+      deferred[name].forEach(promiseF =>
+        promiseF()
+      );
     }
     return Promise.resolve();
   } else {
@@ -55,22 +39,33 @@ function pendingPromise([promiseFactory, name]) {
 
     groupedPromises[name]--;
     return new Promise(resolve => {
-      deferred[name] = resolve;
+      if (!deferred[name]) {
+        deferred[name] = [];
+      }
+      deferred[name].push(resolve);
     });
   }
 }
 
 function runPromise(scenario, index) {
   if (!scenario[index]) return;
-  const [promiseFactory, name] = scenario[index];
+  const [name, promiseFactory] = scenario[index];
 
   pendingPromise(scenario[index])
-    .then(promiseFactory) // this runs the actual promise
     .then(() => {
+      // race all the promises under this name
+      return Promise.race(
+        racePromiseFactories[name].map(f => f())
+      );
+    }) // this runs the actual promise
+    .then(() => {
+      console.log('executed', name);
       runPromise(scenario, index + 1);
-    });
+    })
+    .catch(() => {});
 }
 
+const racePromiseFactories = {};
 function run(scenarios) {
   // group promises with same name
   // SEARCH HAS TO HAPPEN AT RUNTIME (is this async learning?)
@@ -78,19 +73,26 @@ function run(scenarios) {
     const scenario = scenarios[i];
 
     for (var x = 0; x < scenario.length; x++) {
-      const [promiseFactory, name] = scenario[x];
+      const [name, promiseFactory] = scenario[x];
 
       if (!groupedPromises[name]) {
         groupedPromises[name] = 1;
       } else {
-        groupedPromises[name] = groupedPromises[name] + 1;
+        // increase only if it's from another thread
+        groupedPromises[name] =
+          groupedPromises[name] + 1;
       }
+      if (!racePromiseFactories[name]) {
+        racePromiseFactories[name] = [];
+      }
+      racePromiseFactories[name].push(
+        promiseFactory
+      );
     }
   }
 
   for (var i = 0; i < scenarios.length; i++) {
     const scenario = scenarios[i];
-
     runPromise(scenario, 0);
     // for (var x = 0; x < scenario.length; x++) {
     //   const [promiseFactory, name] = scenario[x];
@@ -103,4 +105,29 @@ function run(scenarios) {
   }
 }
 
-run([s1, s2]);
+run([
+  [
+    ['WaitForCard', p(5000)],
+    ['ValidateCard', p(1000)],
+    ['LoadAccount', p(500)],
+    ['WaitForPin', p(1000)]
+  ],
+  // Before account is loaded (but after card is validated) show advertisement:
+  [
+    ['ValidateCard', p(1000)],
+    ['ShowAd', p(500)],
+    ['LoadAccount', p(200)]
+  ],
+  [
+    // Don't show ad if it's enterprise user:
+    ['CheckIfEnterprise', p(500)],
+    ['ShowAd', () => Promise.resolve()] // resolve it immediately
+  ],
+  [
+    // 60 seconds won't elapsed because the earlier one is resolving it
+    // need to account for priority
+    ['ShowAd', p(60000)],
+    ['DoFoo', p(100)]
+  ]
+  //   [['ShowAd', () => Promise.reject()]] // reject it maybe?
+]);
