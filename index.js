@@ -108,26 +108,28 @@ function run(scenarios) {
 run([
   [
     ['WaitForCard', p(5000)],
-    ['ValidateCard', p(1000)],
+    ['ValidateCard', p(10000)],
     ['LoadAccount', p(500)],
     ['WaitForPin', p(1000)]
   ],
   // Before account is loaded (but after card is validated) show advertisement:
   [
-    ['ValidateCard', p(1000)],
+    ['ValidateCard', p(10000)],
     ['ShowAd', p(500)],
     ['LoadAccount', p(200)]
   ],
   [
     // Don't show ad if it's enterprise user:
     ['CheckIfEnterprise', p(500)],
-    ['ShowAd', () => Promise.resolve()] // resolve it immediately
+    ['ShowAd', p(10)] // resolve it immediately
   ],
   [
     // 60 seconds won't elapsed because the earlier one is resolving it
     // need to account for priority
-    ['ShowAd', p(60000)],
+    ['ShowAd', p(6000)],
     ['DoFoo', p(100)]
   ]
+  // CONFLICT SCENARIO:
+  //   [['ShowAd', p(500)], ['ValidateCard', p(600)]]
   //   [['ShowAd', () => Promise.reject()]] // reject it maybe?
 ]);
