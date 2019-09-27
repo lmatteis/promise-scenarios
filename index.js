@@ -23,7 +23,7 @@ const deferred = {};
 // then it decreases them until only 1 is left
 const groupedPromises = {};
 
-function pendingPromise([name, promiseFactory]) {
+function pendingPromise([name]) {
   // look through all remaining promises scenarios
   if (groupedPromises[name] == 1) {
     // resolve all immediately
@@ -62,7 +62,53 @@ function runPromise(scenario, index) {
       console.log('executed', name);
       runPromise(scenario, index + 1);
     })
-    .catch(() => {});
+    .catch(() => {
+      // this runs for each promise chain
+      // hence if one rejects, they will all reject, which is what we want.
+      // but there might be chains "suspending" for
+      // a promise that exists in this chain and we need a way
+      // to free these chains. by deferred[name][..]() will unsupend
+      // the promises in these chains
+      // hence we need to iterate through all promises in the chain that
+      // was rejected (this scenario), check the counter if it's ready to
+      // execute and call deferred[name][..]()
+      // for each one
+      //
+      // for (var i = 0; i < scenario.length; i++) {
+      //   const [
+      //     currName,
+      //     currPromiseFactory
+      //   ] = scenario[i];
+      //   console.log(deferred[currName]);
+      //   deferred[currName].forEach(promiseF =>
+      //     promiseF()
+      //   );
+      // }
+      // OR remove it from groupedPromises and racePromiseFactories
+      for (var i = 0; i < scenario.length; i++) {
+        const [
+          currName,
+          currPromiseFactory
+        ] = scenario[i];
+        if (!currName.startsWith('>')) {
+          groupedPromises[currName]--;
+          // XXX should remove currPromiseFactory
+          racePromiseFactories[currName].pop();
+        }
+      }
+      for (var x = 0; x < scenario.length; x++) {
+        const [
+          currName,
+          currPromiseFactory
+        ] = scenario[x];
+        if (currName.startsWith('>')) {
+          // continue running ONLY the promises
+          // in this chain with a > in front
+          runPromise(scenario, x);
+          break; // ONLY FIRST ONE
+        }
+      }
+    });
 }
 
 const racePromiseFactories = {};
@@ -107,14 +153,14 @@ function run(scenarios) {
 
 run([
   [
-    ['WaitForCard', p(5000)],
-    ['ValidateCard', p(10000)],
+    ['WaitForCard', p(3000)],
+    ['ValidateCard', p(1000)],
     ['LoadAccount', p(500)],
     ['WaitForPin', p(1000)]
   ],
   // Before account is loaded (but after card is validated) show advertisement:
   [
-    ['ValidateCard', p(10000)],
+    ['ValidateCard', p(1000)],
     ['ShowAd', p(500)],
     ['LoadAccount', p(200)]
   ],
@@ -128,6 +174,14 @@ run([
     // need to account for priority
     ['ShowAd', p(6000)],
     ['DoFoo', p(100)]
+  ],
+  [
+    // if is not enterprise (CheckIfEnterprise rejects)
+    // show modal
+    ['CheckIfEnterprise', () => Promise.reject()],
+    ['ThisShouldNotHappen', p(10)],
+    ['>ShowModal', p(1000)],
+    ['>WhatAboutThis', p(10)]
   ]
   // CONFLICT SCENARIO:
   //   [['ShowAd', p(500)], ['ValidateCard', p(600)]]
