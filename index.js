@@ -23,7 +23,9 @@ const deferred = {};
 // then it decreases them until only 1 is left
 const groupedPromises = {};
 
-function pendingPromise([name]) {
+function pendingPromise(promiseItem) {
+  let [name] = promiseItem;
+  name = name.replace('>', '');
   // look through all remaining promises scenarios
   if (groupedPromises[name] == 1) {
     // resolve all immediately
@@ -49,7 +51,9 @@ function pendingPromise([name]) {
 
 function runPromise(scenario, index) {
   if (!scenario[index]) return;
-  const [name, promiseFactory] = scenario[index];
+  var [name, promiseFactory] = scenario[index];
+
+  name = name.replace('>', '');
 
   pendingPromise(scenario[index])
     .then(() => {
@@ -86,11 +90,12 @@ function runPromise(scenario, index) {
       // }
       // OR remove it from groupedPromises and racePromiseFactories
       for (var i = 0; i < scenario.length; i++) {
-        const [
+        let [
           currName,
           currPromiseFactory
         ] = scenario[i];
         if (!currName.startsWith('>')) {
+          currName = currName.replace('>', '');
           groupedPromises[currName]--;
           // XXX should remove currPromiseFactory
           racePromiseFactories[currName].pop();
@@ -104,6 +109,7 @@ function runPromise(scenario, index) {
         if (currName.startsWith('>')) {
           // continue running ONLY the promises
           // in this chain with a > in front
+
           runPromise(scenario, x);
           break; // ONLY FIRST ONE
         }
@@ -119,7 +125,8 @@ function run(scenarios) {
     const scenario = scenarios[i];
 
     for (var x = 0; x < scenario.length; x++) {
-      const [name, promiseFactory] = scenario[x];
+      let [name, promiseFactory] = scenario[x];
+      name = name.replace('>', '');
 
       if (!groupedPromises[name]) {
         groupedPromises[name] = 1;
@@ -139,6 +146,7 @@ function run(scenarios) {
 
   for (var i = 0; i < scenarios.length; i++) {
     const scenario = scenarios[i];
+
     runPromise(scenario, 0);
     // for (var x = 0; x < scenario.length; x++) {
     //   const [promiseFactory, name] = scenario[x];
@@ -181,7 +189,7 @@ run([
     ['CheckIfEnterprise', () => Promise.reject()],
     ['ThisShouldNotHappen', p(10)],
     ['>ShowModal', p(1000)],
-    ['>WhatAboutThis', p(10)]
+    ['>WaitForCard', p(10000)] // delay WaitForCard
   ]
   // CONFLICT SCENARIO:
   //   [['ShowAd', p(500)], ['ValidateCard', p(600)]]
